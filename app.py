@@ -8,7 +8,7 @@ import os
 
 # Gunakan Streamlit Secrets untuk menyimpan API Key
 # Ini adalah cara paling aman untuk menyimpan kredensial di Streamlit Cloud
-API_KEY = st.secrets["gemini_api_key"]
+API_KEY = st.secrets["AIzaSyA7iKTw_gKoP9Oteqo45PTtQJDdBFrTaXk"]
 
 # Nama model Gemini
 MODEL_NAME = 'gemini-1.5-flash'
@@ -87,3 +87,4 @@ if prompt := st.chat_input("Tuliskan keluhan Anda..."):
             except Exception as e:
                 st.error(f"Maaf, terjadi kesalahan saat memproses permintaan: {e}")
                 st.info("Coba ulangi atau periksa koneksi internet.")
+
