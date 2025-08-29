@@ -1,3 +1,4 @@
+# app.py
 import streamlit as st
 import google.generativeai as genai
 import os
@@ -6,18 +7,23 @@ import os
 # PENGATURAN API KEY DAN MODEL
 # ==============================================================================
 
-# Gunakan Streamlit Secrets untuk menyimpan API Key
-# Ini adalah cara paling aman untuk menyimpan kredensial di Streamlit Cloud
-API_KEY = st.secrets["AIzaSyA7iKTw_gKoP9Oteqo45PTtQJDdBFrTaXk"]
+# Ambil API Key dari Streamlit Secrets
+# Anda harus menambahkan API Key di Streamlit Cloud sebagai "GEMINI_API_KEY"
+try:
+    API_KEY = st.secrets["GEMINI_API_KEY"]
+except KeyError:
+    st.error("Peringatan: API Key belum diatur di Streamlit Secrets.")
+    st.error("Harap tambahkan GEMINI_API_KEY ke Secrets Anda.")
+    st.stop() # Hentikan eksekusi jika API Key tidak ditemukan
 
-# Nama model Gemini
+# Nama model Gemini yang akan digunakan.
 MODEL_NAME = 'gemini-1.5-flash'
 
 # ==============================================================================
 # KONTEKS AWAL CHATBOT
 # ==============================================================================
 
-# Definisikan peran chatbot Anda
+# Definisikan peran chatbot Anda di sini.
 INITIAL_CHATBOT_CONTEXT = [
     {
         "role": "user",
@@ -30,14 +36,15 @@ INITIAL_CHATBOT_CONTEXT = [
 ]
 
 # ==============================================================================
-# FUNGSI UTAMA APLIKASI STREAMLIT
+# FUNGSI UTAMA CHATBOT UNTUK STREAMLIT
 # ==============================================================================
 
-# Judul Aplikasi
-st.title("👨‍⚕️ Chatbot Diagnosis Medis")
-
-# Konfigurasi API dengan API Key dari Streamlit Secrets
-genai.configure(api_key=API_KEY)
+# Konfigurasi Gemini API
+try:
+    genai.configure(api_key=API_KEY)
+except Exception as e:
+    st.error(f"Kesalahan saat mengkonfigurasi API Key: {e}")
+    st.stop()
 
 # Inisialisasi model
 try:
@@ -49,42 +56,55 @@ try:
         )
     )
 except Exception as e:
-    st.error(f"Kesalahan saat inisialisasi model: {e}")
-    st.info("Pastikan nama model benar dan API Key valid.")
+    st.error(f"Kesalahan saat inisialisasi model '{MODEL_NAME}': {e}")
     st.stop()
 
-# Inisialisasi riwayat chat di Streamlit session_state
-if "messages" not in st.session_state:
-    st.session_state.messages = INITIAL_CHATBOT_CONTEXT
+# --- Tampilan Antarmuka Streamlit ---
+st.set_page_config(page_title="Chatbot Diagnosa Penyakit", page_icon="🩺")
+st.title("👨‍⚕️ Chatbot Diagnosa Penyakit")
+st.markdown("Masukkan nama penyakit yang ingin Anda ketahui lebih lanjut.")
 
-# Tampilkan pesan dari riwayat chat
+# Inisialisasi riwayat chat di session_state jika belum ada
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+    # Tambahkan pesan awal dari chatbot
+    st.session_state.messages.append({"role": "assistant", "content": "Baik! Tuliskan penyakit yang perlu di diagnosis."})
+
+# Tampilkan riwayat chat yang ada
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        st.markdown(message["parts"][0])
+        st.write(message["content"])
 
-# Tangani input dari pengguna
-if prompt := st.chat_input("Tuliskan keluhan Anda..."):
-    # Tambahkan pesan pengguna ke riwayat
-    st.session_state.messages.append({"role": "user", "parts": [prompt]})
-    # Tampilkan pesan pengguna
+# Inisialisasi sesi chat dengan riwayat awal
+# Ini memastikan model 'mengingat' konteks awal di setiap interaksi
+chat_history = [
+    {"role": m["role"], "parts": [m["content"]]}
+    for m in st.session_state.messages
+    if m["role"] in ["user", "assistant"]
+]
+chat = model.start_chat(history=chat_history)
+
+# Ambil input pengguna
+if user_input := st.chat_input("Tuliskan penyakit di sini..."):
+    # Tambahkan input pengguna ke riwayat
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    
+    # Tampilkan input pengguna di UI
     with st.chat_message("user"):
-        st.markdown(prompt)
+        st.write(user_input)
 
     # Dapatkan respons dari model
-    with st.chat_message("model"):
-        with st.spinner("Sedang Mendiagnosis..."):
+    with st.chat_message("assistant"):
+        with st.spinner("Sedang memproses..."):
             try:
-                # Gunakan riwayat chat dari session_state
-                chat = model.start_chat(history=st.session_state.messages)
-                response = chat.send_message(prompt)
+                response = chat.send_message(user_input, request_options={"timeout": 60})
                 
-                # Tampilkan respons dari model
-                st.markdown(response.text)
-                
-                # Tambahkan respons model ke riwayat
-                st.session_state.messages.append({"role": "model", "parts": [response.text]})
-                
+                if response and response.text:
+                    st.write(response.text)
+                    # Tambahkan respons model ke riwayat
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
+                else:
+                    st.warning("Maaf, saya tidak bisa memberikan balasan.")
             except Exception as e:
-                st.error(f"Maaf, terjadi kesalahan saat memproses permintaan: {e}")
-                st.info("Coba ulangi atau periksa koneksi internet.")
-
+                st.error(f"Terjadi kesalahan saat berkomunikasi dengan Gemini: {e}")
+                st.warning("Silakan coba lagi.")
